@@ -4,7 +4,8 @@ const pool = require('../db/config');
 
 router.post('/', async (req, res) => {
     try {
-        const { status, cliente_id } = req.body;
+        const { cliente_id } = req.body;
+        const status = 'aberto'
         const data = new Date();
         const valorTotal = 0;
         const query = 'INSERT INTO pedidos (data, status, cliente_id, valor_total) VALUES ($1, $2, $3, $4) RETURNING *';
@@ -29,6 +30,7 @@ router.get('/produtos-a-produzir', async(req, res) => {
             JOIN itens_pedido i ON ped.id = i.pedido_id
             JOIN produtos p ON i.produto_id = p.id
             WHERE TO_CHAR(ped.data, 'YYYY-MM-DD') = $1
+            AND i.finished = false
             ORDER BY p.nome, i.pedido_id;
         `;
 
@@ -188,7 +190,7 @@ router.get('/:pedido_id/fechar', async (req, res) => {
             const valorPorPessoa = valorTotal / pessoas;
         }
 
-        res.status(201).json({ message: 'Valor dividido com sucesos', valorPorPessoa });
+        res.status(201).json({ message: 'Valor dividido com sucesso', valorPorPessoa });
     } catch (error) {
         console.error('Erro ao fechar pedido:', error);
         res.status(500).json({ message: 'Erro ao dividir conta' });
