@@ -21,7 +21,7 @@ router.get('/produtos-a-produzir', async(req, res) => {
     try {
         const dataAtual = new Date();
         const dataAtualFormatada = `${dataAtual.getFullYear()}-${(dataAtual.getMonth() + 1).toString().padStart(2, '0')}-${dataAtual.getDate().toString().padStart(2, '0')}`;
-
+        console.log(dataAtual)
         console.log(dataAtualFormatada)
 
         const query = `
@@ -30,9 +30,10 @@ router.get('/produtos-a-produzir', async(req, res) => {
             JOIN itens_pedido i ON ped.id = i.pedido_id
             JOIN produtos p ON i.produto_id = p.id
             WHERE TO_CHAR(ped.data, 'YYYY-MM-DD') = $1
-            AND i.finished = false
+            AND (i.finished = false OR i.finished IS NULL)
             ORDER BY p.nome, i.pedido_id;
         `;
+
 
         const result = await pool.query(query, [dataAtualFormatada]);
         console.log('result, ', result)
