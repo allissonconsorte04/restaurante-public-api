@@ -11,7 +11,7 @@ const authMiddleware = require('./middlewares/authMiddleware');
 
 app.use(cors({
   origin: 'http://localhost:5173',
-  methods: 'GET,POST',
+  methods: 'GET,POST,PUT,DELETE',
   optionsSuccessStatus: 200, // Certifique-se de definir o status HTTP 200 OK para solicitações OPTIONS
 }));
 
