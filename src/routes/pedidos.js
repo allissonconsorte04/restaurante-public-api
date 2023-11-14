@@ -4,9 +4,22 @@ const pool = require('../db/config');
 
 router.get('/', async (req, res) => {
     try {
-        const query = 'SELECT * FROM pedidos';
+        const query = `
+            SELECT 
+                pedidos.id, 
+                pedidos.data, 
+                pedidos.status, 
+                clientes.nome as cliente_nome, 
+                CAST(pedidos.valor_total AS numeric) as valor_total
+            FROM 
+                pedidos
+            JOIN 
+                clientes ON pedidos.cliente_id = clientes.id`;
         const result = await pool.query(query);
 
+        result.rows.forEach(row => {
+            row.valor_total = parseFloat(row.valor_total)
+        })
         res.status(200).json(result.rows);
     } catch (error) {
         console.error('Erro ao obter todos os pedidos: ', error);
@@ -20,8 +33,13 @@ router.post('/', async (req, res) => {
         const status = 'aberto'
         const data = new Date();
         const valorTotal = 0;
-        const query = 'INSERT INTO pedidos (data, status, cliente_id, valor_total) VALUES ($1, $2, $3, $4) RETURNING *';
-        const result = await pool.query(query, [data, status, cliente_id, valorTotal]);
+        const query = `
+            INSERT INTO pedidos (data, status, cliente_id, valor_total)
+            VALUES (CURRENT_DATE, 'aberto', $1, 0.0)
+            RETURNING id, data, status, cliente_id, CAST(valor_total AS numeric) as valor_total;
+        `
+        const result = await pool.query(query, [cliente_id]);
+
         res.status(201).json(result.rows[0]);
     } catch (error) {
         console.error('Erro ao cadastrar pedido:', error);
@@ -29,7 +47,7 @@ router.post('/', async (req, res) => {
     }
 });
 
-router.get('/produtos-a-produzir', async(req, res) => {
+router.get('/produtos-a-produzir', async (req, res) => {
     try {
         const dataAtual = new Date();
         const dataAtualFormatada = `${dataAtual.getFullYear()}-${(dataAtual.getMonth() + 1).toString().padStart(2, '0')}-${dataAtual.getDate().toString().padStart(2, '0')}`;
@@ -37,13 +55,18 @@ router.get('/produtos-a-produzir', async(req, res) => {
         console.log(dataAtualFormatada)
 
         const query = `
-            SELECT p.nome AS nome_produto, i.pedido_id, i.quantidade, i.finished
-            FROM pedidos ped
-            JOIN itens_pedido i ON ped.id = i.pedido_id
-            JOIN produtos p ON i.produto_id = p.id
-            WHERE TO_CHAR(ped.data, 'YYYY-MM-DD') = $1
-            AND (i.finished = false OR i.finished IS NULL)
-            ORDER BY p.nome, i.pedido_id;
+        SELECT 
+            p.nome AS nome_produto, 
+            i.pedido_id, 
+            i.quantidade, 
+            i.finished
+        FROM pedidos ped
+        JOIN itens_pedido i ON ped.id = i.pedido_id
+        JOIN produtos p ON i.produto_id = p.id
+        WHERE TO_CHAR(ped.data, 'YYYY-MM-DD') = $1
+        AND (i.finished = false OR i.finished IS NULL)
+        ORDER BY p.nome, i.pedido_id;
+    
         `;
 
 
@@ -68,7 +91,19 @@ router.get('/:pedido_id', async (req, res) => {
     try {
         const pedidoId = req.params.pedido_id;
 
-        const query = `SELECT pedidos.id, pedidos.data, pedidos.status, pedidos.cliente_id, pedidos.valor_total, itens_pedido.produto_id, itens_pedido.quantidade FROM pedidos LEFT JOIN itens_pedido ON pedidos.id = itens_pedido.pedido_id WHERE pedidos.id = $1`;
+        const query = `
+        SELECT 
+            pedidos.id, 
+            pedidos.data, 
+            pedidos.status, 
+            pedidos.cliente_id, 
+            CAST(pedidos.valor_total AS numeric) as valor_total, 
+            itens_pedido.produto_id, 
+            itens_pedido.quantidade 
+        FROM pedidos 
+        LEFT JOIN itens_pedido ON pedidos.id = itens_pedido.pedido_id 
+        WHERE pedidos.id = $1;
+`;
         const result = await pool.query(query, [pedidoId]);
 
         if (result.rows.length === 0) {
@@ -108,12 +143,21 @@ router.post('/adicionar-item/:pedido_id', async (req, res) => {
             const quantidadeExistente = resultadoVerificacao.rows[0].quantidade;
             const novaQuantidade = quantidadeExistente + quantidade;
 
-            const atualizarQuantidadeQuery = 'UPDATE itens_pedido SET quantidade = $1 WHERE pedido_id = $2 AND produto_id = $3';
+            const atualizarQuantidadeQuery = `
+            UPDATE itens_pedido 
+            SET quantidade = $1, 
+                finished = false 
+            WHERE pedido_id = $2 AND produto_id = $3;
+            `
             const atualizarQuantidadeValues = [novaQuantidade, pedidoId, produto_id];
 
             await pool.query(atualizarQuantidadeQuery, atualizarQuantidadeValues);
         } else {
-            const addProductQuery = 'INSERT INTO itens_pedido (pedido_id, produto_id, quantidade) VALUES ($1, $2, $3) RETURNING *';
+            const addProductQuery = `
+            INSERT INTO itens_pedido (pedido_id, produto_id, quantidade, finished)
+            VALUES ($1, $2, $3, false)
+            ON CONFLICT (pedido_id, produto_id) DO NOTHING;
+            `;
             const addProductValues = [pedidoId, produto_id, quantidade];
 
             const resultAddProduct = await pool.query(addProductQuery, addProductValues);
@@ -137,14 +181,14 @@ router.post('/:pedido_id/fechar', async (req, res) => {
         const { pessoas } = req.body;
 
         if (pessoas < 1 || pessoas > 4) {
-            return res.status(400).json({ message: 'O número de pessoas deve ser entre 1 e 4'});
+            return res.status(400).json({ message: 'O número de pessoas deve ser entre 1 e 4' });
         }
 
-        const valorTotalQuery = 'SELECT valor_total FROM pedidos WHERE id = $1';
+        const valorTotalQuery = 'SELECT CAST(valor_total AS numeric) as valor_total FROM pedidos WHERE id = $1';
         const valorTotalResult = await pool.query(valorTotalQuery, [pedidoId]);
 
-        if (valorTotalResult.rows.length === 0){
-            return res.status(404).json({message: 'Pedido não encontrado'})
+        if (valorTotalResult.rows.length === 0) {
+            return res.status(404).json({ message: 'Pedido não encontrado' });
         }
 
         const valorTotal = valorTotalResult.rows[0].valor_total;
@@ -187,14 +231,14 @@ router.get('/:pedido_id/fechar', async (req, res) => {
         const pessoas = req.query.pessoas;
 
         if (pessoas < 1 || pessoas > 4) {
-            return res.status(400).json({ message: 'O número de pessoas deve ser entre 1 e 4'});
+            return res.status(400).json({ message: 'O número de pessoas deve ser entre 1 e 4' });
         }
 
-        const valorTotalQuery = 'SELECT valor_total FROM pedidos WHERE id = $1';
+        const valorTotalQuery = 'SELECT CAST(valor_total AS numeric) as valor_total FROM pedidos WHERE id = $1';
         const valorTotalResult = await pool.query(valorTotalQuery, [pedidoId]);
 
-        if (valorTotalResult.rows.length === 0){
-            return res.status(404).json({message: 'Pedido não encontrado'})
+        if (valorTotalResult.rows.length === 0) {
+            return res.status(404).json({ message: 'Pedido não encontrado' });
         }
 
         const valorTotal = valorTotalResult.rows[0].valor_total;
@@ -229,17 +273,17 @@ router.put('/atualizar-item/:pedido_id/:produto_id', async (req, res) => {
         const updateQuery = 'UPDATE pedidos SET valor_total = $1 WHERE id = $2';
         await pool.query(updateQuery, [novoValorTotal, pedidoId]);
 
-        res.status(200).json({ message: 'Item do pedido atualizado com sucesso'});
+        res.status(200).json({ message: 'Item do pedido atualizado com sucesso' });
     } catch (error) {
         console.error('Erro ao atualizar item em pedido: ', error);
-        res.status(500).json({ message: 'Erro ao atualizar item em pedido' })
+        res.status(500).json({ message: 'Erro ao atualizar item em pedido' });
     }
-})
+});
 
 async function calcularValorTotalPedido(pedidoId) {
     try {
         const query = `
-            SELECT SUM(p.preco * ip.quantidade) as total
+            SELECT CAST(SUM(p.preco * ip.quantidade) AS numeric) as total
             FROM itens_pedido ip
             INNER JOIN produtos p ON ip.produto_id = p.id
             WHERE pedido_id = $1
@@ -248,14 +292,15 @@ async function calcularValorTotalPedido(pedidoId) {
         const result = await pool.query(query, [pedidoId]);
 
         if (result.rows.length === 0) {
-            return 0;
+            return 0.0;
         }
 
-        return parseFloat(result.rows[0].total) || 0;
+        return parseFloat(result.rows[0].total) || 0.0;
     } catch (error) {
         console.error('Erro ao calcular valor total do pedido: ', error);
-        return 0;
+        return 0.0;
     }
 }
+
 
 module.exports = router;

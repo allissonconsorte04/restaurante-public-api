@@ -4,7 +4,8 @@
 CREATE TABLE clientes (
     id SERIAL PRIMARY KEY,
     nome VARCHAR(255) NOT NULL,
-    email VARCHAR(255) NOT NULL
+    email VARCHAR(255) NOT NULL,
+    telefone VARCHAR(255) NOT NULL,
 );
 
 -- Tabela de produtos
@@ -50,3 +51,13 @@ CREATE TABLE conta_cliente (
     FOREIGN KEY (cliente_id) REFERENCES clientes(id),
     PRIMARY KEY (conta_id, cliente_id)
 );
+
+-- Criação da tabela de usuários
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(255) NOT NULL,
+    password VARCHAR(255) NOT NULL
+);
+
+-- Inserção do usuário admin
+INSERT INTO users (username, password) VALUES ('admin', 'admin');
