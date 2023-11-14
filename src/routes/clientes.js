@@ -19,8 +19,19 @@ router.post('/', async (req, res) => {
 
 router.get('/', async (req, res) => {
   try {
-    const query = 'SELECT * FROM clientes';
-    const result = await pool.query(query);
+    const { nome } = req.query;
+    
+    let query;
+    let values;
+
+    if (nome) {
+      query = `SELECT * FROM clientes WHERE LOWER(nome) LIKE LOWER($1)`
+      values = [`%${nome}%`];
+    } else {
+      query = `SELECT * FROM clientes`;
+      values = [];
+    }
+    const result = await pool.query(query, values);
     res.status(200).json(result.rows);
   } catch (error) {
     console.error('Erro ao listar clientes: ', error);
