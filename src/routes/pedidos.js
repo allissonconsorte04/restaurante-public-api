@@ -2,6 +2,18 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/config');
 
+router.get('/', async (req, res) => {
+    try {
+        const query = 'SELECT * FROM pedidos';
+        const result = await pool.query(query);
+
+        res.status(200).json(result.rows);
+    } catch (error) {
+        console.error('Erro ao obter todos os pedidos: ', error);
+        res.status(500).json({ message: 'Erro ao obter todos os pedidos' });
+    }
+});
+
 router.post('/', async (req, res) => {
     try {
         const { cliente_id } = req.body;
@@ -149,6 +161,9 @@ router.post('/:pedido_id/fechar', async (req, res) => {
         // Associar o pedido à conta
         const queryAssociacao = 'INSERT INTO conta_cliente (conta_id, pedido_id) VALUES ($1, $2)';
         await pool.query(queryAssociacao, [contaId, pedidoId]);
+
+        const updateStatusQuery = 'UPDATE pedidos SET status = $1 WHERE id = $2';
+        await pool.query(updateStatusQuery, ['fechado', pedidoId]);
 
         // Dividir a conta em no máximo 4 pessoas
         if (pessoas > 0 && pessoas <= 4) {
