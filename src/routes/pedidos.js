@@ -92,18 +92,23 @@ router.get('/:pedido_id', async (req, res) => {
         const pedidoId = req.params.pedido_id;
 
         const query = `
-        SELECT 
-            pedidos.id, 
-            pedidos.data, 
-            pedidos.status, 
-            pedidos.cliente_id, 
-            CAST(pedidos.valor_total AS numeric) as valor_total, 
-            itens_pedido.produto_id, 
-            itens_pedido.quantidade 
-        FROM pedidos 
-        LEFT JOIN itens_pedido ON pedidos.id = itens_pedido.pedido_id 
-        WHERE pedidos.id = $1;
-`;
+            SELECT 
+                pedidos.id, 
+                pedidos.data, 
+                pedidos.status, 
+                pedidos.cliente_id, 
+                clientes.nome as cliente_nome,
+                CAST(pedidos.valor_total AS numeric) as valor_total, 
+                itens_pedido.produto_id, 
+                itens_pedido.quantidade,
+                produtos.nome as produto_nome
+            FROM pedidos 
+            LEFT JOIN itens_pedido ON pedidos.id = itens_pedido.pedido_id 
+            LEFT JOIN produtos ON itens_pedido.produto_id = produtos.id
+            LEFT JOIN clientes ON pedidos.cliente_id = clientes.id
+            WHERE pedidos.id = $1;
+        `;
+        
         const result = await pool.query(query, [pedidoId]);
 
         if (result.rows.length === 0) {
@@ -115,19 +120,22 @@ router.get('/:pedido_id', async (req, res) => {
             data: result.rows[0].data,
             status: result.rows[0].status,
             cliente_id: result.rows[0].cliente_id,
+            cliente_nome: result.rows[0].cliente_nome,
             valor_total: result.rows[0].valor_total,
             itens: result.rows.map(row => ({
                 produto_id: row.produto_id,
+                produto_nome: row.produto_nome,
                 quantidade: row.quantidade
             }))
         };
 
-        res.status(200).json(pedidoInfo)
+        res.status(200).json(pedidoInfo);
     } catch (error) {
         console.error('Erro ao obter pedido por ID: ', error);
         res.status(500).json({ message: 'Erro ao obter pedido por ID' });
     }
 });
+
 
 router.post('/adicionar-item/:pedido_id', async (req, res) => {
     try {
